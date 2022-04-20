@@ -110,9 +110,11 @@ class FocalLoss(nn.Module):
         else:  # 'none'
             return loss
 
+
 def smooth_BCE(eps=0.1):  # https://github.com/ultralytics/yolov3/issues/238#issuecomment-598028441
     # return positive, negative label smoothing BCE targets
     return 1.0 - 0.5 * eps, 0.5 * eps
+
 
 def compute_loss(p, targets, model):  # predictions, targets, model
     ft = torch.cuda.FloatTensor if p[0].is_cuda else torch.Tensor
@@ -148,11 +150,6 @@ def compute_loss(p, targets, model):  # predictions, targets, model
             pxy = ps[:, :2].sigmoid()
             pwh = ps[:, 2:4].exp().clamp(max=1E3) * anchors[i]
             pbox = torch.cat((pxy, pwh), 1)  # predicted box
-            # if i == 0:
-            #     giou = bbox_iou(pbox.t(), tbox[i], x1y1x2y2=False, DIoU=True)  # giou(prediction, target)
-            # elif i ==1 :
-            #     giou = bbox_iou(pbox.t(), tbox[i], x1y1x2y2=False, CIoU=True)  # giou(prediction, target)
-            # else:
             giou = bbox_iou(pbox.t(), tbox[i], x1y1x2y2=False, GIoU=True)  # giou(prediction, target)
             lbox += (1.0 - giou).sum() if red == 'sum' else (1.0 - giou).mean()  # giou loss
 

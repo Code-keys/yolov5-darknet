@@ -1,5 +1,0 @@
-classes=10
-train=./train/800/JPEGImages.txt
-valid=./val/800/JPEGImages.txt
-names=./test/class_names.data
-backup=./model

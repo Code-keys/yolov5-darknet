@@ -160,5 +160,3 @@ class HardSwish(nn.Module):  # https://arxiv.org/pdf/1905.02244.pdf
 class Mish(nn.Module):  # https://github.com/digantamisra98/Mish
     def forward(self, x):
         return x * F.softplus(x).tanh()
-
-
