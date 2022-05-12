@@ -15,4 +15,7 @@ support yolov5 dilation multiThread4speedUp ( teacher: m/l/x ; student : s) <br>
 
 </p>
 </details>
+
+## Acknowledgments & Contact
+
 # To Be complete ！！
