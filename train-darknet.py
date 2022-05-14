@@ -432,7 +432,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()  
     parser.add_argument('--weights', type=str, default='', help='initial weights path')
-    parser.add_argument('--cfg', type=str, default='weights/yolov4-0.5.cfg', help='model.yaml path')
+    parser.add_argument('--cfg', type=str, default='weights/yolov4-0.5.cfg', help='model.cfg path')
     parser.add_argument('--data', type=str, default='/home/gy/CX/VisDrone/VisDrone.yaml', help='data.yaml path')
     parser.add_argument('--hyp', type=str, default='darknet/superparam.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=300)

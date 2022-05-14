@@ -134,12 +134,18 @@ def write_cfg(cfg_file, module_defs):
 
 class BNOptimizer():
     @staticmethod
-    def updateBN(sr_flag, module_list, s, prune_idx):
+    def updateBN(sr_flag, module_list, s, prune_idx, types=0):
         if sr_flag:
             for idx in prune_idx:
                 # Squential(Conv, BN, Lrelu)
                 bn_module = module_list[idx][1]
-                bn_module.weight.grad.data.add_(s * torch.sign(bn_module.weight.data))  # L1
+                if  ( types== 0):  # L1
+                    bn_module.weight.grad.data.add_(s * torch.sign(bn_module.weight.data))  # L1
+                if  ( types== 1):  # gussion 
+                    bn_module.weight.grad.data.add_( 
+                        s * torch.sign(bn_module.weight.data) * ( 1 + 1 * torch.exp( -8 * (bn_module.weight.data.abs() -1)*(bn_module.weight.data.abs() -1 ) )  )# L1
+                    )
+
 
 def obtain_quantiles(bn_weights, num_quantile=5):
     sorted_bn_weights, i = torch.sort(bn_weights)
@@ -421,3 +427,68 @@ def update_activation(i, pruned_model, activation, CBL_idx):
             next_bn.running_mean.data.sub_(offset)
         else:
             next_conv.bias.data.add_(offset)
+
+
+####################
+def bn_scale(group, threshold=0.3):
+    """Compute l1-norm scores of parameter on given axis.
+
+    This function return a list of parameters' l1-norm scores on given axis.
+    Each element of list is a tuple with format (name, axis, score) in which 'name' is parameter's name
+    and 'axis' is the axis reducing on and `score` is a np.array storing the l1-norm of strucure on `axis`.
+
+    Args:
+       group(list): A group of parameters. The first parameter of the group is Bn layer's weight
+                    while the others are parameters affected by pruning the first one. Each parameter in group
+                    is represented as tuple '(name, values, axis)' in which `name` is the parameter's name and
+                    and `values` is the values of parameter and `axis` is the axis reducing on pruning on.
+    Returns:
+       list: A list of tuple storing l1-norm on given axis.
+    """ 
+    # utils to get the chnnel num by the threValue
+    def obtain_mask(bn_weight: np.array, thre: int):
+        """
+        """
+        thre2 = thre
+        while True:
+            thre1 = thre2
+            mask = bn_weight.__ge__(thre1)
+            remain = int(mask.sum())
+            # print(remain)
+            if remain > 0:
+                break
+            else:
+                thre2 = thre2 * 0.95
+        return mask
+
+    scores = []
+    bn_weights = []
+    bn_max = -1
+    for name, value, axis, idx in group:  # bns
+        value1 = np.abs(value)
+        # print(scale)
+        bn_weights += value1.tolist()
+        # 对BN中的γ参数排序
+        # 避免剪掉所有channel的最高阈值(每个BN层的gamma的最大值的最小值即为阈值上限)
+        bn_max_min = value1.max() if bn_max == -1 else ( value1.max()  if  value1.max() < bn_max else bn_max )
+        # scores.append((name, axis, scale, idx))
+
+    print(f'Threshold should be less than {bn_max_min:.4f}.')
+    sorted_bn = np.sort(bn_weights)  
+ 
+    thre_index = int(len(sorted_bn) * threshold )
+    # 获得α参数的阈值，小于该值的α参数对应的通道，全部裁剪掉
+    bn_thre = sorted_bn[thre_index]
+
+    for name, value, axis, idx in group:  # bns
+ 
+        scale =  np.abs( value.reshape([-1]) )
+
+        mask1 =  obtain_mask(scale, bn_thre)
+        channel= int(mask1.sum())
+
+        scores.append( [name,  scale, axis,idx, channel] ) # name, value, axis, pruned_idx, out_channels 
+
+    print(f'Channels with Gamma value less than {bn_thre:.4f} are pruned!')
+    
+    return scores, bn_thre 

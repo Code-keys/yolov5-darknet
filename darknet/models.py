@@ -295,6 +295,7 @@ class YOLOLayer(nn.Module):
 
         # p.view(bs, 255, 13, 13) -- > (bs, 3, 13, 13, 85)  # (bs, anchors, grid, grid, classes + xywh)
         if self.layers.__len__() == 2 : 
+            # for double-head
             reg = out[self.layers[0]].view(bs, self.na, 5, self.ny, self.nx).permute(0, 1, 3, 4, 2)  # prediction
             cls = out[self.layers[1]].view(bs, self.na, self.nc, self.ny, self.nx).permute(0, 1, 3, 4, 2) # prediction
             p = torch.cat( [reg, cls] , -1).contiguous()
@@ -465,13 +466,161 @@ class Darknet(nn.Module):
                 f.write('\n')
         print('convert to trnsorrt done!')
 
+    ############################# prune utils  #############################
+    def Do_Prune(self, style="l1_norm", show=True, prune_percent= 0.25, save_path='' ): 
+
+        from .prune_utils import bn_scale, parse_module_defs
+        import time, copy
+
+        bn_groups, cv_groups, other = [], [], [] 
+
+        *other, CBL = parse_module_defs(self.module_defs)
+ 
+        if style == "bn":    # "bn_scale":
+            style = 'BN_SCALE'
+            for idx, m in enumerate( self.module_list ):
+                if isinstance(m, nn.Sequential):    
+                    if m.__len__() == 1:
+                        continue
+                    if m[0].kernel_size == (3, 3):
+                        continue
+                    if idx in CBL :
+                        # isinstance(m[1], nn.BatchNorm2d):
+                        bn_groups.append( (f"The ID OF BN LAYER: {idx}", m[1].weight.abs().cpu().data.detach().numpy(), 0, idx) ) 
+            group = bn_groups
+            scores, thre = bn_scale( group , prune_percent )
+        elif style == "hr":     # "bn_scale":
+            return
+        elif style == 'l1':
+            return
+        elif style == 'fpgm': 
+            return
+        elif style == "f1f": 
+            return
+        else:
+            assert( "ERROR Prune Type ! ")  
+        try: 
+                        
+            from matplotlib import pyplot as plt
+            global point 
+            def click(event):
+                global point
+                artist = event.artist 
+                ind = event.ind[0] 
+                xd = artist.get_xdata()[ind] 
+                yd = artist.get_ydata()[ind] 
+                point = ( xd, yd )
+                print("Cut point is ", point )
+
+            for i,  score in enumerate( scores ) :   # name, value, axis, pruned_idx, out_channels 
+                point = (-1, -1)
+
+                X = np.array( range(score[1].__len__()) )
+                Y = np.sort( score[1] ) # plt.scatter(X, Y, s=10, alpha=.5)
+                line, = plt.plot( X , Y, 'g^', picker=4) 
+
+                plt.xlim(  -1 , score[1].__len__())
+                # plt.ylim( min(0.5,score[1].min() ) ,max( 1.5, score[1].max()) )
+                plt.ylim(  score[1].min() ,  score[1].max() )
+
+                plt.xlabel("FILTER_ID")
+                plt.ylabel("IMPORTANCE")
+                plt.title( style +" TYPE: " + score[0] )
+                plt.axhline( y= thre, ls=":", c="red", linestyle='--') #添加水平直线
+
+                cid = plt.gcf().canvas.mpl_connect("pick_event", click)
+
+                plt.ion()   
+                plt.pause( 0.5 )
+                # plt.show()
+ 
+                if point !=  (-1, -1) :
+                    channel  = score[1].__len__() - point[0]
+                    scores[i][-1] = channel
+
+                # scores[i][-1] =  (scores[i][-1] // 8) * 8 if scores[i][-1] % 8 < 4 else (scores[i][-1] // 8 ) * 8 + 8
+                scores[i][-1] = (scores[i][-1] // 2 + scores[i][-1] % 2) * 2
+                scores[i][-1] = 1 if scores[i][-1] <= 4 else scores[i][-1]
+                    
+                print("Type: %s, Layer: %s, %3.3f(Mean), %3.3f(Max), %3.3f (Min),  >>   %3d  >>   %3d" \
+                    % (style, score[0], score[1].mean(),  score[1].max(), score[1].min(),score[1].__len__() ,score[-1]) )
+                plt.close()
+        except:
+            print("Error On Plot.")
+
+        if save_path :     
+            import copy 
+            import tqdm
+            def Compute_time( model, tt ) :
+                img = torch.rand([1, 3, 640, 640]).to( "cuda:0" )
+                model = model.to( "cuda:0" ).train()
+                model(img)
+                model(img)
+                model(img)
+                print( f"Evaluate {tt} model , wait !" )
+                t = time.time()
+                for i in tqdm.tqdm( range(10) ):
+                    model(img)
+                return time.time() - t
+            compact_module_defs = copy.deepcopy(self.module_defs)
+
+            for id , score in enumerate( scores ):    # module_list.94.FilterStripe.FilterSkeleton
+                idx = int(score[0].split(":")[-1].strip()) 
+                module = self.module_list[id]
+                filters_remain = int(score[-1])
+ 
+                assert compact_module_defs[idx]['type'] == 'convolutional' 
+                compact_module_defs[idx]['filters'] = str(filters_remain) 
+
+            self.write_cfg( save_path + os.sep + style + f"_{prune_percent}.cfg", compact_module_defs) 
+
+            model = Darknet( save_path + os.sep + style + f"_{prune_percent}.cfg"  ) 
+            t2 = Compute_time(self,'org')
+            t1 = Compute_time(model, 'new' )
+            print("Time Waste comparation is :   %3.3f(before)   >>   %3.3f(after)\n   speed accelebrate rate : %3.3f     " % ( t2, t1, (t2-t1)/t2 ) )
+
+    def write_cfg(self, cfg_file, module_defs): 
+        with open(cfg_file, 'w') as f: 
+            f.write('''[net]\n# Testing\n# batch=1\n# subdivisions=1\n# Training\nbatch=64\nsubdivisions=8\n''')
+            f.write('''width=640\nheight=640\nchannels=3\nmomentum=0.949\n# decay=0.001\ndecay=0.0005\nangle=0.3\n''')
+            f.write('''saturation=1.5\nexposure=1.5\nhue=.1\n\n# learning_rate=0.00261\nlearning_rate=0.001261\n''')
+            f.write('''burn_in=1000\nmax_batches=25000\npolicy=steps\nsteps=12000,20000\nscales=.1,.1\n#cutmix=1\nmosaic=1\n\n''')
+            for idx, module_def in enumerate( module_defs ): 
+                f.write(f"#Layer {idx}\n") 
+                f.write(f"[{module_def['type']}]\n") 
+                for key, value in module_def.items():
+                    if key == 'type':
+                        continue
+                    elif key == 'anchors':  # return nparray 
+                        v = ''
+                        for i in value:
+                            for j in i:
+                                j = int(j)
+                                v += f"{j}," 
+                        f.write(f"{key}=" + v[:-1] + "\n")  
+                    elif (key in ['from', 'layers', 'mask']) or (key == 'size' and isinstance(value, list)):  # return array
+                        v = ''
+                        for i in value:
+                            v += f"{i},"
+                        f.write(f"{key}=" + v[:-1] + "\n") 
+                    else:
+                        f.write(f"{key}={value}\n")   
+                f.write("\n") 
+        return True
+
+    def write_weight(self, path="" ):
+        if path.endwith(".pt"):
+            torch.save(self.state_dict, path)
+        elif path.endwith(".weight"):
+            save_weights(self, path)  
+
+
 def get_yolo_layers(model):
     return [i for i, m in enumerate(model.module_list) if m.__class__.__name__ == 'YOLOLayer']  # [89, 101, 113]
 
 def get_yolo_strides(model):
     return np.array(
         [m.stride for i, m in enumerate(model.module_list) if m.__class__.__name__ == 'YOLOLayer'])  # [89, 101, 113]
-
 
 def load_darknet_weights(self, weights, cutoff=-1):
     # Parses and loads the weights stored in 'weights'

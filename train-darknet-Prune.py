@@ -338,10 +338,12 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
                 sr_flag = get_sr_flag(epoch, opt.sr)
                 if hasattr(model, 'module'):
                     if opt.prune != -1 and epoch > 100:
-                        BNOptimizer.updateBN(sr_flag, model.module.module_list, opt.s, prune_idx)
+                        BNOptimizer.updateBN(sr_flag, model.module.module_list, opt.s , prune_idx)
+                        BNOptimizer.updateBN(sr_flag, model.module.module_list, opt.s , prune_idx, opt.ptp) 
                 else:
                     if opt.prune != -1 and epoch > 100:
                         BNOptimizer.updateBN(sr_flag, model.module_list, opt.s, prune_idx)
+                        BNOptimizer.updateBN(sr_flag, model.module_list, opt.s, prune_idx, opt.ptp)
 
             # Backward
             scaler.scale(loss).backward()
@@ -484,6 +486,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser() 
     parser.add_argument('--sr', type=int, default=1)
     parser.add_argument('--prune', type=int, default=0)
+    parser.add_argument('--ptp', type=float, default=0, help="pruneType")
     parser.add_argument('--s', type=float, default=0.0005)
     parser.add_argument('--weights', type=str, default='/home/gy/CX/yolov5-4.0/darknet/yolov5sm/exp2/weights/best.weights', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='/home/gy/CX/head_yolov5/yolov5-darknet/weights/yolov5sm.cfg', help='model.yaml path')

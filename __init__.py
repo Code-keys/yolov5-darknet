@@ -26,19 +26,44 @@ def transfer_from_pt(cfg, weights):
     save_weights(model, weights.replace(".pt", ".weights")  )
     print( f'saved {weights.replace(".pt", ".weights")}')
 
+  
+if __name__ == '__main__': 
+    # kmean_anchors(path='../../DataSets/Infrared/infrared-pv.yaml', n=9, img_size=640, thr=4.0, gen=5000, verbose=True)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--cfg', type=str, default='/home/gy/CX/Ship/models/new_split/models/yolov5s/Jetson-nano/yolov5-v6-ship-2cls/exp.5/weights/model.cfg', help='*.cfg path') 
+    parser.add_argument('--weights', type=str, default='/home/gy/CX/Ship/models/new_split/models/yolov5s/Jetson-nano/yolov5-v6-ship-2cls/exp.5/weights/best.weights', help='weights path')
+    parser.add_argument('--r', type=float, default=0.9, help='weights path')
+    parser.add_argument('--type', type=str, default="bn", help='weights path')  
+    opt = parser.parse_args() 
+    opt.save_pth = opt.weights[::-1].split("/", 1)[1][::-1]
+ 
+    model = Darknet( opt.cfg  )
 
-if __name__ == '__main__':
+    model.to('cpu').eval()
+    # model.convert2rt(opt.weights.replace(".weights", ".wts"))
 
-    # kmean_anchors(path='/home/gy/CX/VisDrone/VisDrone.yaml', n=12, img_size=2016, thr=3.0, gen=5000, verbose=True)
+    if opt.weights.endswith('.pt'):  # pytorch format 
+        try:
+            try:
+                model.load_state_dict(torch.load( opt.weights, map_location='cpu')['model'].state_dict()) 
+            except:
+                model.load_state_dict(torch.load( opt.weights, map_location='cpu')['model'])  
+            print('Transferred %g items from $old$.pt ' %   len(model.state_dict()) )  # report
+        except :
+            new_ckpt = {}
+            ckpt = torch.load( opt.weights, map_location='cpu')
+            new_ckpt['model'] = {k: v for k, v in ckpt['model'].items() if model.state_dict()[k].numel() == v.numel()}
+            model.load_state_dict(ckpt['model'], strict=False)
+            print('Transferred %g/%g items from %s' % (len(new_ckpt['model'].items()), len(model.state_dict()), opt.weights))  # report
+        try:
+            save_weights(model, opt.weights.replace( ".pt", ".weights" ))
+        except:
+            print( "Transfer pt 2 weights failed !")
+    elif opt.weights.endswith('.weights'): 
+        load_darknet_weights(model, opt.weights )
 
+    img = model(torch.rand(3, 3, 608, 608).to("cpu"))
 
-    
-    cfg = '/home/gy/CX/head_yolov5/yolov5-darknet/weights/yolov5s-csp-1_3.cfg'
-
-    weights = '/home/gy/CX/yolov5-4.0/darknet/yolov5sm/exp4/weights/last.pt'
-
-
-    # transfer_from_pt(cfg, weights)
-
-    model = Darknet( cfg  ).to('cuda:2').train()
-    img = model( torch.Tensor(3,3,832,832).to("cuda:2"), verbose=True)
+    for ii in [ opt.r , ]: 
+        model.Do_Prune( style=opt.type, show=True, prune_percent= 0.25, save_path=opt.save_pth  ) 
