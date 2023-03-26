@@ -172,9 +172,13 @@ def create_modules(module_defs, img_size, cfg):
 
         elif mdef['type'] == 'route':  # nn.Sequential() placeholder for 'route' layer
             layers = mdef['layers']
-            filters = sum([output_filters[l + 1 if l > 0 else l] for l in layers])
             routs.extend([i + l if l < 0 else l for l in layers])
-            modules = FeatureConcat(layers=layers)
+            if 'group_id' in mdef and 'groups' in mdef:
+                filters = sum([output_filters[l + 1 if l > 0 else l] // int(mdef['groups'])  for l in layers])
+                modules = GroupConcat(layers=layers, groups=mdef["groups"], group_id=mdef["group_id"])
+            else:
+                filters = sum([output_filters[l + 1 if l > 0 else l] for l in layers])
+                modules = FeatureConcat(layers=layers)
 
         elif mdef['type'] == 'shortcut':  # nn.Sequential() placeholder for 'shortcut' layer
             layers = mdef['from']
@@ -182,8 +186,6 @@ def create_modules(module_defs, img_size, cfg):
             routs.extend([i + l if l < 0 else l for l in layers])
             modules = WeightedFeatureFusion(layers=layers, weight='weights_type' in mdef)
         
-
-
         elif mdef['type'] == 'reorg3d':  # yolov3-spp-pan-scale
             pass
 
@@ -393,13 +395,13 @@ class Darknet(nn.Module):
             name = module.__class__.__name__ 
             # print(name) 
             # print(i, name)
-            if name in ['WeightedFeatureFusion', 'FeatureConcat' ]:  # sum, concat 
+            if name in ['WeightedFeatureFusion', 'FeatureConcat', 'GroupConcat' ]:  # sum, concat 
                 if verbose:
                     l = [i - 1] + module.layers  # layers
                     sh = [list(x.shape)] + [list(out[i].shape) for i in module.layers]  # shapes
                     str = ' >> ' + ' + '.join(['layer %g %s' % x for x in zip(l, sh)])
            
-                x = module(x, out)  # WeightedFeatureFusion(), FeatureConcat()
+                x = module(x, out)  # WeightedFeatureFusion(), FeatureConcat() GroupCncat
 
             elif name == 'YOLOLayer':
                 yolo_out.append(module(x, out))

@@ -7,7 +7,6 @@ from threading import Thread
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.tensor import _convert
 import yaml
 from tqdm import tqdm
 
@@ -23,7 +22,7 @@ from utils.torch_utils import select_device, time_synchronized
 import goto 
 from goto import with_goto
 
-@with_goto
+#@with_goto
 def test(data,
          weights=None,
          batch_size=32,
@@ -119,14 +118,14 @@ def test(data,
         log_imgs = 0
     
     map50_best, best_img = 0,0
-    label .begin
-    try:
-        if opt.multi_scale: 
-            imgsz += model.stride.max()
-            imgsz = check_img_size(imgsz, s=model.stride.max())  # check img_size
-            print("Now test on %d x %d img-size ~ " % (imgsz, imgsz)) 
-    except:
-        pass
+    # label .begin
+    # try:
+    #     if opt.multi_scale: 
+    #         imgsz += model.stride.max()
+    #         imgsz = check_img_size(imgsz, s=model.stride.max())  # check img_size
+    #         print("Now test on %d x %d img-size ~ " % (imgsz, imgsz)) 
+    # except:
+    #     pass
  
     # Dataloader
     if not training:
@@ -275,18 +274,18 @@ def test(data,
     print(pf % ('all', seen, nt.sum(), mp, mr, map50, map))
     
 
-    try:  
-        if opt.multi_scale: 
-            best_img = imgsz if map50_best < map50 else best_img
-            map50_best = map50 if map50_best < map50 else map50_best 
-            print("best on img-size: %d x %d\n" %(best_img, best_img)) 
-            if imgsz > 2848:
-                print('Stoped at img-size 2048*2048. ')
-                goto .end
-            goto .begin
-    except:
-        pass 
-    label .end 
+    # try:  
+    #     if opt.multi_scale: 
+    #         best_img = imgsz if map50_best < map50 else best_img
+    #         map50_best = map50 if map50_best < map50 else map50_best 
+    #         print("best on img-size: %d x %d\n" %(best_img, best_img)) 
+    #         if imgsz > 2848:
+    #             print('Stoped at img-size 2048*2048. ')
+    #             goto .end
+    #         goto .begin
+    # except:
+    #     pass 
+    # label .end 
 
     # Print results per class
     if verbose and nc > 1 and len(stats):
@@ -331,7 +330,6 @@ def test(data,
             print(f'pycocotools unable to run: {e}')
 
 
-
     # Return results
     if not training:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
@@ -373,9 +371,6 @@ if __name__ == '__main__':
     opt.project = opt.weights[::-1].split("/",1)[-1][::-1]
     print(opt) 
     
-    if opt.task == 'val':
-        opt.json = "/home/gy/CX/VisDrone/val/800/gt.json"
-
     if opt.task in ['val', 'test']:  # run normally
         test(opt.data,
              opt.weights,

@@ -49,6 +49,20 @@ class FeatureConcat(nn.Module):
         return torch.cat([outputs[i] for i in self.layers], 1) if self.multiple else outputs[self.layers[0]]
 
 
+class GroupConcat(nn.Module):
+    def __init__(self, layers, groups, group_id):
+        super(GroupConcat, self).__init__()
+        self.layers = layers  # layer indices
+        self.multiple = len(layers) > 1  # multiple layers flag
+        self.groups = int(groups)
+        self.group_id = int(group_id)
+
+    def forward(self, x, outputs):
+        return torch.cat([ outputs[i][:, self.group_id * (outputs[i].shape[1] // self.groups) : (self.group_id + 1) * (outputs[i].shape[1] // self.groups) ,...]
+            for i in self.layers], 1) if self.multiple else \
+            outputs[self.layers[0]][:, self.group_id * (outputs[self.layers[0]].shape[1] // self.groups) : (self.group_id + 1) * (outputs[self.layers[0]].shape[1] // self.groups) ,...]
+
+
 class WeightedFeatureFusion(nn.Module):  # weighted sum of 2 or more layers https://arxiv.org/abs/1911.09070
     def __init__(self, layers, weight=False):
         super(WeightedFeatureFusion, self).__init__()
